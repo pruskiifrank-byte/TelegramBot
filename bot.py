@@ -1,24 +1,21 @@
 # bot.py
 from telebot import TeleBot, types
-import telebot  # ← ЭТО ДОБАВЬ, чтобы работало обновление Update
+import telebot
 import os
 import random
 import urllib.parse
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 API_TOKEN = os.getenv("API_TOKEN")
-CALLBACK_URL = os.getenv("CALLBACK_URL")  # полный URL для callback Global24
-# не используем MERCHANT_ID
+CALLBACK_URL = os.getenv("CALLBACK_URL")
 
 if not API_TOKEN:
     raise RuntimeError("API_TOKEN is not set in env")
 
 bot = TeleBot(API_TOKEN, parse_mode="HTML", threaded=False)
 
-# ————— Товары ——————————
 products = {
     "Товар 1": {
         "photo": "images/Огурец.jpg",
@@ -57,7 +54,6 @@ orders = {}
 last_text_messages = {}
 
 
-# ————— УТИЛИТЫ ——————————
 def send_temp_message(chat_id, text, reply_markup=None):
     msg = bot.send_message(chat_id, text, reply_markup=reply_markup)
     if chat_id in last_text_messages:
@@ -69,28 +65,36 @@ def send_temp_message(chat_id, text, reply_markup=None):
     return msg
 
 
-# ============ ХЕНДЛЕРЫ ============
-
-
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     chat_id = message.chat.id
     user_name = message.from_user.first_name or "друг"
-
     user_data[chat_id] = {}
-
     welcome_text = (
         f"🎄 Привет, {user_name}! 🎁\n"
         "Добро пожаловать к Гринчу!\n"
         "💰 Оплата — Global24\n"
         "Выберите город:"
     )
-
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add("Запорожье")
-
     send_temp_message(chat_id, welcome_text)
     bot.send_message(chat_id, "Выберите город:", reply_markup=markup)
+
+
+@bot.message_handler(commands=["help"])
+def help_command(message):
+    text = (
+        "❓ *Помощь*\n\n"
+        "• Выберите товар и оплатите его через Global24\n"
+        "• После оплаты получите фото и текст с местом закладки\n"
+        "• В случае ошибки — попробуйте снова\n\n"
+        "Команды:\n"
+        "/start — перезапустить бота\n"
+        "/help — справка\n"
+        "Кнопка 'Мои заказы' — показать активные заказы"
+    )
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
 
 @bot.message_handler(func=lambda m: m.text == "Запорожье")
@@ -106,6 +110,7 @@ def send_product_menu(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("Товар 1", "Товар 2")
     markup.row("Товар 3", "Товар 4")
+    markup.row("Мои заказы")
     bot.send_message(chat_id, "Выберите товар:", reply_markup=markup)
 
 
@@ -114,7 +119,6 @@ def product_choice(message):
     chat_id = message.chat.id
     user_data[chat_id]["product"] = message.text
     product = products[message.text]
-
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("Выбрать адрес доставки", "Назад")
 
@@ -145,9 +149,15 @@ def address_step(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for addr in delivery_addresses:
         markup.add(addr)
+    markup.add("⬅️ Вернуться назад")
 
     send_temp_message(chat_id, "Выберите район доставки:")
     bot.send_message(chat_id, "Адреса:", reply_markup=markup)
+
+
+@bot.message_handler(func=lambda m: m.text == "⬅️ Вернуться назад")
+def back_from_address(message):
+    send_product_menu(message)
 
 
 @bot.message_handler(func=lambda m: m.text in delivery_addresses)
@@ -176,10 +186,27 @@ def confirm_order(message):
     send_payment_button(chat_id, order_number, product_name, amount, text)
 
 
+@bot.message_handler(func=lambda m: m.text == "Мои заказы")
+def my_orders(message):
+    chat_id = message.chat.id
+
+    user_orders = [oid for oid, uid in orders.items() if uid == chat_id]
+
+    if not user_orders:
+        bot.send_message(chat_id, "📭 У вас пока нет активных заказов.")
+        return
+
+    text = "📦 Ваши активные заказы:\n\n"
+    for oid in user_orders:
+        prod = user_data.get(chat_id, {}).get("product", "—")
+        addr = user_data.get(chat_id, {}).get("address", "—")
+        text += f"• №{oid} — {prod}, район: {addr}\n"
+
+    bot.send_message(chat_id, text)
+
+
 def send_payment_button(chat_id, order_id, product_name, amount, text):
     description = urllib.parse.quote_plus(product_name)
-
-    # Global24 mobile/web flow in your integration — merchant_id is optional; remove if not needed.
     payment_url = (
         f"https://pay.global24.com.ua/payment?"
         f"amount={amount}&"
@@ -188,13 +215,11 @@ def send_payment_button(chat_id, order_id, product_name, amount, text):
         f"description={description}&"
         f"callback_url={CALLBACK_URL}"
     )
-
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton("💳 Оплатить", url=payment_url))
     markup.add(
         types.InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_{order_id}")
     )
-
     bot.send_message(chat_id, text, reply_markup=markup)
 
 
@@ -203,12 +228,41 @@ def cancel_order_callback(call):
     order_id = call.data.split("_")[1]
     chat_id = orders.get(order_id)
 
+    markup = types.InlineKeyboardMarkup()
+    markup.add(
+        types.InlineKeyboardButton(
+            "Да, отменить", callback_data=f"confirm_cancel_{order_id}"
+        )
+    )
+    markup.add(types.InlineKeyboardButton("Нет", callback_data="cancel_no"))
+
+    bot.edit_message_text(
+        f"Отменить заказ №{order_id}?",
+        call.message.chat.id,
+        call.message.message_id,
+        reply_markup=markup,
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("confirm_cancel_"))
+def cancel_confirm(call):
+    order_id = call.data.split("_")[2]
+    chat_id = orders.get(order_id)
+
     if chat_id:
         orders.pop(order_id, None)
         user_data.pop(chat_id, None)
 
-    bot.answer_callback_query(call.id, "Отменено")
-    bot.send_message(chat_id, f"Заказ №{order_id} отменён.")
+    bot.edit_message_text(
+        f"Заказ №{order_id} отменён.",
+        call.message.chat.id,
+        call.message.message_id,
+    )
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "cancel_no")
+def cancel_no(call):
+    bot.answer_callback_query(call.id, "Отмена отменена")
 
 
 def give_product(chat_id, product_name):
@@ -221,14 +275,9 @@ def give_product(chat_id, product_name):
         pass
 
 
-# ————— ФУНКЦИЯ ДЛЯ WEBHOOK —————
 def process_update(json_str: str):
-    """
-    Передаём сюда строку JSON (request.get_data().decode('utf-8'))
-    """
     try:
         update = telebot.types.Update.de_json(json_str)
         bot.process_new_updates([update])
     except Exception:
-        # не бросаем исключение, чтобы Flask всегда отвечал 200
         pass
