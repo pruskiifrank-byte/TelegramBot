@@ -87,8 +87,8 @@ def help_command(message):
     text = (
         "❓ *Помощь*\n\n"
         "• Выберите товар и оплатите его через Global24\n"
-        "• После оплаты получите фото и текст с местом закладки\n"
-        "• В случае ошибки — попробуйте снова\n\n"
+        "• После оплаты получите фото и текст с местом подарка\n"
+        "• В случае ошибки напиши в техподдержку\n\n"
         "Команды:\n"
         "/start — перезапустить бота\n"
         "/help — справка\n"
@@ -110,7 +110,7 @@ def send_product_menu(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("Товар 1", "Товар 2")
     markup.row("Товар 3", "Товар 4")
-    markup.row("Мои заказы")
+    markup.row("Мои заказы")  # ← добавили
     bot.send_message(chat_id, "Выберите товар:", reply_markup=markup)
 
 
@@ -193,14 +193,14 @@ def my_orders(message):
     user_orders = [oid for oid, uid in orders.items() if uid == chat_id]
 
     if not user_orders:
-        bot.send_message(chat_id, "📭 У вас пока нет активных заказов.")
+        bot.send_message(chat_id, "📭 У вас нет активных заказов.")
         return
 
     text = "📦 Ваши активные заказы:\n\n"
     for oid in user_orders:
-        prod = user_data.get(chat_id, {}).get("product", "—")
-        addr = user_data.get(chat_id, {}).get("address", "—")
-        text += f"• №{oid} — {prod}, район: {addr}\n"
+        product = user_data.get(chat_id, {}).get("product", "—")
+        district = user_data.get(chat_id, {}).get("address", "—")
+        text += f"• №{oid} — {product}, район: {district}\n"
 
     bot.send_message(chat_id, text)
 
@@ -273,6 +273,17 @@ def give_product(chat_id, product_name):
             bot.send_photo(chat_id, photo)
     except FileNotFoundError:
         pass
+    # --- АВТООЧИСТКА ЗАВЕРШЁННЫХ ЗАКАЗОВ ---
+    order_id = user_data.get(chat_id, {}).get("order_number")
+
+    if order_id:
+        orders.pop(str(order_id), None)
+        user_data.pop(chat_id, None)
+
+        bot.send_message(
+            chat_id,
+            f"🧹 Почистим за тобой грязюку… \n" f"Заказ №{order_id} будет удалён!",
+        )
 
 
 def process_update(json_str: str):
