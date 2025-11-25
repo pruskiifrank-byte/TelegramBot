@@ -1,11 +1,9 @@
 # server.py
 from flask import Flask, request
-import hmac
-import hashlib
-import os
+import hmac, hashlib, os
 from dotenv import load_dotenv
-import telebot
-import logging
+from bot import bot, orders, user_data, give_product  # ← ВАЖНО!
+
 
 load_dotenv()
 
