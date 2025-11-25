@@ -1,3 +1,4 @@
+# bot.py
 from telebot import TeleBot, types
 import os
 import random
@@ -7,11 +8,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 API_TOKEN = os.getenv("API_TOKEN")
-MERCHANT_ID = os.getenv("MERCHANT_ID")
-CALLBACK_URL = os.getenv("CALLBACK_URL")
+CALLBACK_URL = os.getenv("CALLBACK_URL")  # полный URL для callback Global24
+# не используем MERCHANT_ID
+
+if not API_TOKEN:
+    raise RuntimeError("API_TOKEN is not set in env")
 
 bot = TeleBot(API_TOKEN, parse_mode="HTML", threaded=False)
-
 
 # ————— Товары ——————————
 products = {
@@ -58,17 +61,19 @@ def send_temp_message(chat_id, text, reply_markup=None):
     if chat_id in last_text_messages:
         try:
             bot.delete_message(chat_id, last_text_messages[chat_id])
-        except:
+        except Exception:
             pass
     last_text_messages[chat_id] = msg.message_id
     return msg
 
 
-# ————— СТАРТ ——————————
+# ============ ХЕНДЛЕРЫ ============
+
+
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     chat_id = message.chat.id
-    user_name = message.from_user.first_name
+    user_name = message.from_user.first_name or "друг"
 
     user_data[chat_id] = {}
 
@@ -86,23 +91,19 @@ def send_welcome(message):
     bot.send_message(chat_id, "Выберите город:", reply_markup=markup)
 
 
-# ————— ГОРОД ——————————
 @bot.message_handler(func=lambda m: m.text == "Запорожье")
 def city_choice(message):
     chat_id = message.chat.id
     user_data[chat_id]["city"] = message.text
-
     send_temp_message(chat_id, f"Город выбран: {message.text}")
     send_product_menu(message)
 
 
-# ————— МЕНЮ ТОВАРОВ ——————————
 def send_product_menu(message):
     chat_id = message.chat.id
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("Товар 1", "Товар 2")
     markup.row("Товар 3", "Товар 4")
-
     bot.send_message(chat_id, "Выберите товар:", reply_markup=markup)
 
 
@@ -115,16 +116,22 @@ def product_choice(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("Выбрать адрес доставки", "Назад")
 
-    with open(product["photo"], "rb") as p:
-        bot.send_photo(
+    try:
+        with open(product["photo"], "rb") as p:
+            bot.send_photo(
+                chat_id,
+                p,
+                caption=f"{product['description']}\nЦена: {product['price']} грн.",
+                reply_markup=markup,
+            )
+    except FileNotFoundError:
+        bot.send_message(
             chat_id,
-            p,
-            caption=f"{product['description']}\nЦена: {product['price']} грн.",
+            f"{product['description']}\nЦена: {product['price']} грн.",
             reply_markup=markup,
         )
 
 
-# ————— АДРЕС ДОСТАВКИ ——————————
 @bot.message_handler(func=lambda m: m.text in ["Назад", "Выбрать адрес доставки"])
 def address_step(message):
     chat_id = message.chat.id
@@ -167,13 +174,12 @@ def confirm_order(message):
     send_payment_button(chat_id, order_number, product_name, amount, text)
 
 
-# ————— ОПЛАТА ——————————
 def send_payment_button(chat_id, order_id, product_name, amount, text):
     description = urllib.parse.quote_plus(product_name)
 
+    # Global24 mobile/web flow in your integration — merchant_id is optional; remove if not needed.
     payment_url = (
         f"https://pay.global24.com.ua/payment?"
-        f"merchant_id={MERCHANT_ID}&"
         f"amount={amount}&"
         f"order_id={order_id}&"
         f"currency=UAH&"
@@ -203,11 +209,24 @@ def cancel_order_callback(call):
     bot.send_message(chat_id, f"Заказ №{order_id} отменён.")
 
 
-# ————— ВЫДАЧА ТОВАРА ——————————
 def give_product(chat_id, product_name):
     product = products[product_name]
-
     bot.send_message(chat_id, product["delivery_text"])
+    try:
+        with open(product["delivery_photo"], "rb") as photo:
+            bot.send_photo(chat_id, photo)
+    except FileNotFoundError:
+        pass
 
-    with open(product["delivery_photo"], "rb") as photo:
-        bot.send_photo(chat_id, photo)
+
+# ————— ФУНКЦИЯ ДЛЯ WEBHOOK —————
+def process_update(json_str: str):
+    """
+    Передаём сюда строку JSON (request.get_data().decode('utf-8'))
+    """
+    try:
+        update = telebot.types.Update.de_json(json_str)
+        bot.process_new_updates([update])
+    except Exception:
+        # не бросаем исключение, чтобы Flask всегда отвечал 200
+        pass
