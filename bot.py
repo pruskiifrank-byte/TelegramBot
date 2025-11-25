@@ -1,9 +1,11 @@
 # bot.py
 from telebot import TeleBot, types
+import telebot  # ← ЭТО ДОБАВЬ, чтобы работало обновление Update
 import os
 import random
 import urllib.parse
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
