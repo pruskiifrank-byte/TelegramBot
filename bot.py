@@ -1,7 +1,6 @@
-import telebot
-import random
-from telebot import types
+from telebot import TeleBot, types
 import os
+import random
 import urllib.parse
 from dotenv import load_dotenv
 
@@ -11,7 +10,7 @@ API_TOKEN = os.getenv("API_TOKEN")
 MERCHANT_ID = os.getenv("MERCHANT_ID")
 CALLBACK_URL = os.getenv("CALLBACK_URL")
 
-bot = telebot.TeleBot(API_TOKEN, threaded=False)
+bot = TeleBot(API_TOKEN, parse_mode="HTML", threaded=False)
 
 
 # ————— Товары ——————————
@@ -53,7 +52,7 @@ orders = {}
 last_text_messages = {}
 
 
-# ————— Утилита чистого сообщения ——————————
+# ————— УТИЛИТЫ ——————————
 def send_temp_message(chat_id, text, reply_markup=None):
     msg = bot.send_message(chat_id, text, reply_markup=reply_markup)
     if chat_id in last_text_messages:
@@ -65,9 +64,7 @@ def send_temp_message(chat_id, text, reply_markup=None):
     return msg
 
 
-# ============ ЛОГИКА БОТА ============
-
-
+# ————— СТАРТ ——————————
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     chat_id = message.chat.id
@@ -89,6 +86,7 @@ def send_welcome(message):
     bot.send_message(chat_id, "Выберите город:", reply_markup=markup)
 
 
+# ————— ГОРОД ——————————
 @bot.message_handler(func=lambda m: m.text == "Запорожье")
 def city_choice(message):
     chat_id = message.chat.id
@@ -98,6 +96,7 @@ def city_choice(message):
     send_product_menu(message)
 
 
+# ————— МЕНЮ ТОВАРОВ ——————————
 def send_product_menu(message):
     chat_id = message.chat.id
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -125,6 +124,7 @@ def product_choice(message):
         )
 
 
+# ————— АДРЕС ДОСТАВКИ ——————————
 @bot.message_handler(func=lambda m: m.text in ["Назад", "Выбрать адрес доставки"])
 def address_step(message):
     chat_id = message.chat.id
@@ -167,6 +167,7 @@ def confirm_order(message):
     send_payment_button(chat_id, order_number, product_name, amount, text)
 
 
+# ————— ОПЛАТА ——————————
 def send_payment_button(chat_id, order_id, product_name, amount, text):
     description = urllib.parse.quote_plus(product_name)
 
@@ -202,7 +203,7 @@ def cancel_order_callback(call):
     bot.send_message(chat_id, f"Заказ №{order_id} отменён.")
 
 
-# ————— Выдача товара ——————————
+# ————— ВЫДАЧА ТОВАРА ——————————
 def give_product(chat_id, product_name):
     product = products[product_name]
 
