@@ -24,30 +24,24 @@ products = {
         "delivery_photo": "delivery/adr1.jpg",
         "delivery_text": "📍 Бульвар 1, дом 7 (тайник возле дерева)",
     },
-    "Товар 2": {
-        "photo": "images/Огурец2.jpg",
-        "description": "Описание Товара 2",
-        "price": 700,
-        "delivery_photo": "delivery/adr2.jpg",
-        "delivery_text": "📍 Центральная 21 — под камнем справа",
-    },
-    "Товар 3": {
-        "photo": "images/Огурец3.jpg",
-        "description": "Описание Товара 3",
-        "price": 700,
-        "delivery_photo": "delivery/adr3.jpg",
-        "delivery_text": "📍 Проспект Мира, 15 — под лавкой",
-    },
-    "Товар 4": {
-        "photo": "images/Огурец4.jpg",
-        "description": "Описание Товара 4",
-        "price": 700,
-        "delivery_photo": "delivery/adr4.jpg",
-        "delivery_text": "📍 Сквер Гринча, куст №3",
-    },
 }
 
 delivery_addresses = ["Бульвар Шевченко", "Улица Центральная", "Проспект Мира"]
+
+grinch_jokes = [
+    "😈 Гринч ворчит: «Опять ты… ну ладно, выбирай!»",
+    "🎁 Гринч шепчет: «Это не подарок… это стратегическая пакость!»",
+    "💚 «Не переживай, я почти добрый сегодня!» — P.S.Гринч.",
+    "👀 «Если что-то пойдёт не так — это не я!» — честный Гринч.",
+    "😂 «Я бы помог, но мне лень… шучу, я и так ничего не делаю!»",
+    "😏 «Выбирай быстрее, пока я не передумал!»",
+    "🎄 «Праздник у меня один — когда никто ничего не хочет…»",
+    "🧦 «Мои носки пахнут лучше, чем настроение людей…» — Гринч.",
+    "🔥 «Я не злой, я просто… тёплый изнутри!»",
+    "😼 «Если подарок исчезнет — знай, его забрал… Неуловимый любитель чужих подарков»",
+    "😼 ««Улыбаетесь? Потерпите, сейчас пройдёт.»»",
+    "😈 Гринч шепчет: «Выбирай осторожнее, а то вдруг понравится!»",
+]
 
 user_data = {}
 orders = {}
@@ -103,17 +97,21 @@ def city_choice(message):
     user_data[chat_id]["city"] = message.text
     send_temp_message(chat_id, f"Город выбран: {message.text}")
     send_product_menu(message)
+    bot.send_message(
+        chat_id, "Гринч ворчит: «Опять работа... Ну ладно, выбирай дальше!»"
+    )
 
 
 def send_product_menu(message):
     chat_id = message.chat.id
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("Товар 1", "Товар 2")
-    markup.row("Товар 3", "Товар 4")
+    markup.row("Товар 1")
+    # markup.row("Товар 3", "Товар 4")
     markup.row("Мои заказы")  # ← добавили
     bot.send_message(chat_id, "Выберите товар:", reply_markup=markup)
 
 
+@bot.message_handler(func=lambda m: m.text in products.keys())
 @bot.message_handler(func=lambda m: m.text in products.keys())
 def product_choice(message):
     chat_id = message.chat.id
@@ -137,6 +135,9 @@ def product_choice(message):
             reply_markup=markup,
         )
 
+    # 🔥 СЛУЧАЙНАЯ ШУТКА ГРИНЧА
+    bot.send_message(chat_id, random.choice(grinch_jokes))
+
 
 @bot.message_handler(func=lambda m: m.text in ["Назад", "Выбрать адрес доставки"])
 def address_step(message):
@@ -149,14 +150,23 @@ def address_step(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for addr in delivery_addresses:
         markup.add(addr)
-    markup.add("⬅️ Вернуться назад")
+
+    # 🔥 Новая кнопка "Назад к товарам"
+    markup.add("⬅️ Назад к товарам")
 
     send_temp_message(chat_id, "Выберите район доставки:")
     bot.send_message(chat_id, "Адреса:", reply_markup=markup)
 
 
+# Старый обработчик (оставляем)
 @bot.message_handler(func=lambda m: m.text == "⬅️ Вернуться назад")
 def back_from_address(message):
+    send_product_menu(message)
+
+
+# 🔥 Новый обработчик "Назад к товарам"
+@bot.message_handler(func=lambda m: m.text == "⬅️ Назад к товарам")
+def back_to_products(message):
     send_product_menu(message)
 
 
@@ -203,6 +213,12 @@ def my_orders(message):
         text += f"• №{oid} — {product}, район: {district}\n"
 
     bot.send_message(chat_id, text)
+
+
+# 🔥 Команда /orders → работает так же, как кнопка "Мои заказы"
+@bot.message_handler(commands=["orders"])
+def my_orders_command(message):
+    my_orders(message)
 
 
 def send_payment_button(chat_id, order_id, product_name, amount, text):
