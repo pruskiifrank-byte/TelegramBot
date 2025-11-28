@@ -12,7 +12,7 @@ bot = TeleBot(API_TOKEN, parse_mode="HTML")
 
 
 # -----------------------------------------
-# Команда /start
+# Команда /start 2
 # -----------------------------------------
 @bot.message_handler(commands=["start"])
 def start(message):
