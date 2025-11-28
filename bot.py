@@ -270,7 +270,7 @@ def my_orders_command(message):
 
 def send_payment_button(chat_id, order_id, product_name, amount, text):
     # карта из .env
-    card_number = os.getenv("CARD_NUMBER", "2066 6652 7388 94")
+    card_number = os.getenv("CARD_NUMBER" , "2066 6652 7388 94")
 
     payment_text = (
         f"{text}\n\n"
